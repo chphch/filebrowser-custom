@@ -124,7 +124,13 @@
           :options="videoOptions"
         >
         </VideoPlayer>
-        <object v-else-if="isPdf" class="pdf" :data="previewUrl"></object>
+        <iframe
+          v-else-if="isPdf"
+          class="pdf"
+          :src="`/pdfjs/web/viewer.html?file=${encodeURIComponent(previewUrl)}`"
+          frameborder="0"
+          style="width:100%;height:100%;min-height:80vh;"
+        ></iframe>
         <div v-else-if="fileStore.req?.type == 'blob'" class="info">
           <div class="title">
             <i class="material-icons">feedback</i>
