@@ -125,9 +125,9 @@
         >
         </VideoPlayer>
         <iframe
-          v-else-if="isPdf"
+          v-else-if="isPdf && pdfBlobUrl"
           class="pdf"
-          :src="`/pdfjs/web/viewer.html?file=${encodeURIComponent(previewUrl + (previewUrl.includes('?') ? '&' : '?') + 'auth=' + authStore.jwt)}`"
+          :src="`/pdfjs/web/viewer.html?file=${encodeURIComponent(pdfBlobUrl)}`"
           frameborder="0"
           style="width:100%;height:100%;min-height:80vh;"
         ></iframe>
@@ -191,7 +191,7 @@ import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
 
 import { files as api } from "@/api";
-import { createURL } from "@/api/utils";
+import { createURL, fetchURL } from "@/api/utils";
 import { resizePreview } from "@/utils/constants";
 import url from "@/utils/url";
 import { throttle } from "lodash-es";
@@ -270,6 +270,7 @@ const previousRaw = ref<string>("");
 const nextRaw = ref<string>("");
 const csvContent = ref<ArrayBuffer | string>("");
 const csvError = ref<string>("");
+const pdfBlobUrl = ref<string>("");
 
 const player = ref<HTMLVideoElement | HTMLAudioElement | null>(null);
 
@@ -347,7 +348,12 @@ onMounted(async () => {
   updatePreview();
 });
 
-onBeforeUnmount(() => window.removeEventListener("keydown", key));
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", key);
+  if (pdfBlobUrl.value) {
+    URL.revokeObjectURL(pdfBlobUrl.value);
+  }
+});
 
 // Specify methods
 const deleteFile = () => {
@@ -407,6 +413,21 @@ const updatePreview = async () => {
 
   const dirs = route.fullPath.split("/");
   name.value = decodeURIComponent(dirs[dirs.length - 1]);
+
+  // Load PDF as blob for PDF.js viewer
+  if (isPdf.value && fileStore.req) {
+    if (pdfBlobUrl.value) {
+      URL.revokeObjectURL(pdfBlobUrl.value);
+      pdfBlobUrl.value = "";
+    }
+    try {
+      const res = await fetchURL(`/api/raw${fileStore.req.path}?inline=true`, {});
+      const blob = await res.blob();
+      pdfBlobUrl.value = URL.createObjectURL(blob);
+    } catch (e: any) {
+      $showError(e);
+    }
+  }
 
   // Load CSV content if it's a CSV file
   if (isCsv.value && fileStore.req) {
