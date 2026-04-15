@@ -127,7 +127,7 @@
         <iframe
           v-else-if="isPdf"
           class="pdf"
-          :src="`/pdfjs/web/viewer.html?file=${encodeURIComponent(previewUrl)}`"
+          :src="`/pdfjs/web/viewer.html?file=${encodeURIComponent(previewUrl + (previewUrl.includes('?') ? '&' : '?') + 'auth=' + authStore.jwt)}`"
           frameborder="0"
           style="width:100%;height:100%;min-height:80vh;"
         ></iframe>

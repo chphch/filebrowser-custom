@@ -55,6 +55,11 @@ func (e extractor) ExtractToken(r *http.Request) (string, error) {
 	}
 
 	if r.Method == http.MethodGet {
+		// Accept auth token via query parameter (for PDF.js and direct links)
+		if q := r.URL.Query().Get("auth"); q != "" && strings.Count(q, ".") == 2 {
+			return q, nil
+		}
+
 		cookie, _ := r.Cookie("auth")
 		if cookie != nil && strings.Count(cookie.Value, ".") == 2 {
 			return cookie.Value, nil
