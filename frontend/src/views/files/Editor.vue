@@ -80,7 +80,8 @@
 <script setup lang="ts">
 import { files as api } from "@/api";
 import buttons from "@/utils/buttons";
-import url from "@/utils/url";
+import url, { encodePath } from "@/utils/url";
+import { baseURL } from "@/utils/constants";
 import ace, { Ace, version as ace_version } from "ace-builds";
 import "ace-builds/src-noconflict/ext-language_tools";
 import modelist from "ace-builds/src-noconflict/ext-modelist";
@@ -124,6 +125,58 @@ const katexOptions = {
   throwOnError: false,
 };
 marked.use(markedKatex(katexOptions));
+
+// Resolve image src in md preview to authenticated filebrowser raw URL.
+// Relative paths resolve against the current md file's directory.
+const getMdDirPath = (): string => {
+  let p = route.path;
+  if (baseURL && p.startsWith(baseURL)) {
+    p = p.slice(baseURL.length);
+  }
+  const idx = p.lastIndexOf("/");
+  return idx >= 0 ? p.slice(0, idx + 1) : "/";
+};
+
+const resolveImageURL = (href: string): string => {
+  if (!href || /^(https?:|data:|blob:|\/\/)/i.test(href)) {
+    return href;
+  }
+
+  let abs = href.startsWith("/") ? href : getMdDirPath() + href;
+
+  // Normalize . and .. segments
+  const parts = abs.split("/");
+  const out: string[] = [];
+  for (const part of parts) {
+    if (part === "..") {
+      if (out.length > 1) out.pop();
+    } else if (part !== ".") {
+      out.push(part);
+    }
+  }
+  abs = out.join("/");
+  if (!abs.startsWith("/")) abs = "/" + abs;
+
+  const params = new URLSearchParams({
+    inline: "true",
+    auth: authStore.jwt,
+  });
+  const prefix = baseURL.endsWith("/") ? baseURL : baseURL + "/";
+  return `${prefix}api/raw${encodePath(abs)}?${params.toString()}`;
+};
+
+marked.use({
+  renderer: {
+    image({ href, title, text }: { href: string; title: string | null; text: string }) {
+      const src = resolveImageURL(href);
+      const escapedAlt = (text ?? "").replace(/"/g, "&quot;");
+      const titleAttr = title
+        ? ` title="${title.replace(/"/g, "&quot;")}"`
+        : "";
+      return `<img src="${src}" alt="${escapedAlt}"${titleAttr} />`;
+    },
+  },
+});
 
 const isSelectionEmpty = ref(true);
 
