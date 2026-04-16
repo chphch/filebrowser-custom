@@ -21,6 +21,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Project uses pnpm; ignore stray npm/yarn lockfiles
+/frontend/package-lock.json
+/frontend/yarn.lock
+
 # Editor directories and files
 .idea
 .vscode
