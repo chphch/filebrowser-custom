@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -36,6 +37,7 @@ type userInfo struct {
 	Username              string            `json:"username"`
 	AceEditorTheme        string            `json:"aceEditorTheme"`
 	Favorites             []string          `json:"favorites"`
+	Scope                 string            `json:"scope"`
 }
 
 type authToken struct {
@@ -219,6 +221,10 @@ func renewHandler(tokenExpireTime time.Duration) handleFunc {
 }
 
 func printToken(w http.ResponseWriter, _ *http.Request, d *data, user *users.User, tokenExpirationTime time.Duration) (int, error) {
+	absScope, err := filepath.Abs(filepath.Join(d.server.Root, user.Scope))
+	if err != nil {
+		absScope = user.Scope
+	}
 	claims := &authToken{
 		User: userInfo{
 			ID:                    user.ID,
@@ -234,6 +240,7 @@ func printToken(w http.ResponseWriter, _ *http.Request, d *data, user *users.Use
 			Username:              user.Username,
 			AceEditorTheme:        user.AceEditorTheme,
 			Favorites:             user.Favorites,
+			Scope:                 absScope,
 		},
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

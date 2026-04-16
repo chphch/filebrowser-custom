@@ -157,6 +157,12 @@ const resolveImageURL = (href: string): string => {
   abs = out.join("/");
   if (!abs.startsWith("/")) abs = "/" + abs;
 
+  // Strip user scope prefix if present (e.g., /home/hyunwoojung/foo -> /foo)
+  const scope = (authStore.user?.scope ?? "").replace(/\/+$/, "");
+  if (scope && (abs === scope || abs.startsWith(scope + "/"))) {
+    abs = abs.slice(scope.length) || "/";
+  }
+
   const params = new URLSearchParams({
     inline: "true",
     auth: authStore.jwt,
