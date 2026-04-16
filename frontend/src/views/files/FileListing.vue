@@ -212,11 +212,34 @@
           </div>
         </div>
 
-        <h2 data-clear-on-click="true" v-if="fileStore.req?.numDirs ?? false">
+        <h2 data-clear-on-click="true" v-if="favs.length > 0">
+          {{ t("files.favorites") }}
+        </h2>
+        <div
+          v-if="favs.length > 0"
+          data-clear-on-click="true"
+          @contextmenu="showContextMenu"
+        >
+          <item
+            v-for="item in favs"
+            :key="base64(item.name)"
+            v-bind:index="item.index"
+            v-bind:name="item.name"
+            v-bind:isDir="item.isDir"
+            v-bind:url="item.url"
+            v-bind:modified="item.modified"
+            v-bind:type="item.type"
+            v-bind:size="item.size"
+            v-bind:path="item.path"
+          >
+          </item>
+        </div>
+
+        <h2 data-clear-on-click="true" v-if="dirs.length > 0">
           {{ t("files.folders") }}
         </h2>
         <div
-          v-if="fileStore.req?.numDirs ?? false"
+          v-if="dirs.length > 0"
           data-clear-on-click="true"
           @contextmenu="showContextMenu"
         >
@@ -235,11 +258,11 @@
           </item>
         </div>
 
-        <h2 data-clear-on-click="true" v-if="fileStore.req?.numFiles ?? false">
+        <h2 data-clear-on-click="true" v-if="files.length > 0">
           {{ t("files.files") }}
         </h2>
         <div
-          v-if="fileStore.req?.numFiles ?? false"
+          v-if="files.length > 0"
           data-clear-on-click="true"
           @contextmenu="showContextMenu"
         >
@@ -413,39 +436,38 @@ const ascOrdered = computed(() =>
   fileStore.req ? fileStore.req.sorting.asc : false
 );
 
-const dirs = computed(() => items.value.dirs.slice(0, showLimit.value));
-
 const favorites = computed(() => authStore.user?.favorites ?? []);
 
-const sortWithFavoritesFirst = (arr: any[]) => {
-  const favs = arr.filter((item) => favorites.value.includes(item.path));
-  const rest = arr.filter((item) => !favorites.value.includes(item.path));
-  return [...favs, ...rest];
-};
-
 const items = computed(() => {
+  const favDirs: any[] = [];
+  const favFiles: any[] = [];
   const dirs: any[] = [];
   const files: any[] = [];
 
   fileStore.req?.items.forEach((item) => {
+    const isFav = favorites.value.includes(item.path);
     if (item.isDir) {
-      dirs.push(item);
+      (isFav ? favDirs : dirs).push(item);
     } else {
-      files.push(item);
+      (isFav ? favFiles : files).push(item);
     }
   });
 
-  return {
-    dirs: sortWithFavoritesFirst(dirs),
-    files: sortWithFavoritesFirst(files),
-  };
+  return { favs: [...favDirs, ...favFiles], dirs, files };
+});
+
+const favs = computed(() => items.value.favs.slice(0, showLimit.value));
+
+const dirs = computed(() => {
+  let _showLimit = showLimit.value - items.value.favs.length;
+  if (_showLimit < 0) _showLimit = 0;
+  return items.value.dirs.slice(0, _showLimit);
 });
 
 const files = computed((): Resource[] => {
-  let _showLimit = showLimit.value - items.value.dirs.length;
-
+  let _showLimit =
+    showLimit.value - items.value.favs.length - items.value.dirs.length;
   if (_showLimit < 0) _showLimit = 0;
-
   return items.value.files.slice(0, _showLimit);
 });
 
@@ -608,6 +630,11 @@ const keyEvent = (event: KeyboardEvent) => {
       break;
     case "a":
       event.preventDefault();
+      for (const fav of items.value.favs) {
+        if (fileStore.selected.indexOf(fav.index) === -1) {
+          fileStore.selected.push(fav.index);
+        }
+      }
       for (const file of items.value.files) {
         if (fileStore.selected.indexOf(file.index) === -1) {
           fileStore.selected.push(file.index);
