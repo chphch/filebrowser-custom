@@ -15,6 +15,7 @@ interface IUser {
   viewMode: ViewModeType;
   sorting?: Sorting;
   aceEditorTheme: string;
+  favorites?: string[];
 }
 
 type ViewModeType = "list" | "mosaic" | "mosaic gallery";

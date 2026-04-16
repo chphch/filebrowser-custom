@@ -40,6 +40,14 @@
         <time :datetime="modified">{{ humanTime() }}</time>
       </p>
     </div>
+
+    <span
+      v-if="!readOnly && path"
+      class="material-icons favorite-btn"
+      :class="{ 'is-favorite': isFavorite }"
+      @click.stop="toggleFavorite"
+      :title="isFavorite ? 'Remove from favorites' : 'Add to favorites'"
+    >{{ isFavorite ? "star" : "star_border" }}</span>
   </div>
 </template>
 
@@ -51,7 +59,7 @@ import { useLayoutStore } from "@/stores/layout";
 import { enableThumbs } from "@/utils/constants";
 import { filesize } from "@/utils";
 import dayjs from "dayjs";
-import { files as api } from "@/api";
+import { files as api, users as usersApi } from "@/api";
 import * as upload from "@/utils/upload";
 import { computed, inject, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -117,6 +125,30 @@ const thumbnailUrl = computed(() => {
 const isThumbsEnabled = computed(() => {
   return enableThumbs;
 });
+
+const isFavorite = computed(() => {
+  if (!props.path || !authStore.user?.favorites) return false;
+  return authStore.user.favorites.includes(props.path);
+});
+
+const toggleFavorite = async () => {
+  if (!props.path || !authStore.user?.id) return;
+
+  const current = authStore.user.favorites ?? [];
+  const updated = isFavorite.value
+    ? current.filter((p) => p !== props.path)
+    : [...current, props.path];
+
+  try {
+    await usersApi.update(
+      { id: authStore.user.id, favorites: updated },
+      ["favorites"]
+    );
+    authStore.updateUser({ favorites: updated });
+  } catch (e: any) {
+    $showError(e);
+  }
+};
 
 const humanSize = () => {
   return props.type == "invalid_link" ? "invalid link" : filesize(props.size);

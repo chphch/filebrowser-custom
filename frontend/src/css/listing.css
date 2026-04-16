@@ -281,3 +281,29 @@ html[dir="rtl"] #listing {
 #listing #multiple-selection i {
   color: var(--iconSecondary);
 }
+
+/* Favorite star button */
+#listing .item span.favorite-btn {
+  position: absolute;
+  right: 0.5em;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: 'Material Icons';
+  font-size: 1.3em;
+  line-height: 1;
+  opacity: 0.45;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  cursor: pointer;
+  color: var(--textPrimary);
+  z-index: 2;
+  user-select: none;
+}
+
+#listing .item:hover span.favorite-btn,
+#listing .item span.favorite-btn.is-favorite {
+  opacity: 1;
+}
+
+#listing .item span.favorite-btn.is-favorite {
+  color: #f5a623;
+}

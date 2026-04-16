@@ -415,6 +415,14 @@ const ascOrdered = computed(() =>
 
 const dirs = computed(() => items.value.dirs.slice(0, showLimit.value));
 
+const favorites = computed(() => authStore.user?.favorites ?? []);
+
+const sortWithFavoritesFirst = (arr: any[]) => {
+  const favs = arr.filter((item) => favorites.value.includes(item.path));
+  const rest = arr.filter((item) => !favorites.value.includes(item.path));
+  return [...favs, ...rest];
+};
+
 const items = computed(() => {
   const dirs: any[] = [];
   const files: any[] = [];
@@ -427,7 +435,10 @@ const items = computed(() => {
     }
   });
 
-  return { dirs, files };
+  return {
+    dirs: sortWithFavoritesFirst(dirs),
+    files: sortWithFavoritesFirst(files),
+  };
 });
 
 const files = computed((): Resource[] => {
