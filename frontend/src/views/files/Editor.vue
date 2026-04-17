@@ -96,6 +96,7 @@ import { useLayoutStore } from "@/stores/layout";
 import { getEditorTheme } from "@/utils/theme";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
+import "katex/dist/katex.min.css";
 import { inject, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
@@ -121,8 +122,9 @@ const isMarkdownFile =
   fileStore.req?.name.endsWith(".md") ||
   fileStore.req?.name.endsWith(".markdown");
 const katexOptions = {
-  output: "mathml" as const,
+  output: "htmlAndMathml" as const,
   throwOnError: false,
+  nonStandard: true,
 };
 marked.use(markedKatex(katexOptions));
 
