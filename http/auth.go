@@ -20,7 +20,12 @@ import (
 )
 
 const (
-	DefaultTokenExpirationTime = time.Hour * 2
+	// DefaultTokenExpirationTime is how long an issued JWT stays valid by
+	// default. A long-lived token paired with the auto-renew header lets the
+	// frontend keep users signed in across browser restarts, mirroring the
+	// "stay signed in" behavior of common modern web apps. Operators can
+	// override via the tokenExpirationTime setting.
+	DefaultTokenExpirationTime = time.Hour * 24 * 30
 )
 
 type userInfo struct {

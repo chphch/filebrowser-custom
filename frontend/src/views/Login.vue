@@ -1,6 +1,6 @@
 <template>
   <div id="login" :class="{ recaptcha: recaptcha }">
-    <form @submit="submit">
+    <form @submit="submit" method="post" action="">
       <img :src="logoURL" alt="File Browser" />
       <h1>{{ name }}</h1>
       <p v-if="reason != null" class="logout-message">
@@ -13,12 +13,20 @@
         class="input input--block"
         type="text"
         autocapitalize="off"
+        autocorrect="off"
+        spellcheck="false"
+        id="username"
+        name="username"
+        autocomplete="username"
         v-model="username"
         :placeholder="t('login.username')"
       />
       <input
         class="input input--block"
         type="password"
+        id="password"
+        name="password"
+        :autocomplete="createMode ? 'new-password' : 'current-password'"
         v-model="password"
         :placeholder="t('login.password')"
       />
@@ -26,6 +34,9 @@
         class="input input--block"
         v-if="createMode"
         type="password"
+        id="password-confirm"
+        name="password-confirm"
+        autocomplete="new-password"
         v-model="passwordConfirm"
         :placeholder="t('login.passwordConfirm')"
       />

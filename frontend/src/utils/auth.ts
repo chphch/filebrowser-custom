@@ -10,7 +10,12 @@ export function parseToken(token: string) {
   // falsy or malformed jwt will throw InvalidTokenError
   const data = jwtDecode<JwtPayload & { user: IUser }>(token);
 
-  document.cookie = `auth=${token}; Path=/; SameSite=Strict;`;
+  // Persist the auth cookie until the JWT itself expires so the session
+  // survives a browser restart (otherwise it is treated as a session cookie
+  // and the user has to log in again on every relaunch).
+  const maxAge = data.exp ? Math.max(0, data.exp - Math.floor(Date.now() / 1000)) : 0;
+  const secure = window.location.protocol === "https:" ? " Secure;" : "";
+  document.cookie = `auth=${token}; Path=/; Max-Age=${maxAge}; SameSite=Strict;${secure}`;
 
   localStorage.setItem("jwt", token);
 
