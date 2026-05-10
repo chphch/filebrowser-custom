@@ -5,6 +5,7 @@ import { jwtDecode } from "jwt-decode";
 import { authMethod, baseURL, noAuth, logoutPage } from "./constants";
 import { StatusError } from "@/api/utils";
 import { setSafeTimeout } from "@/api/utils";
+import getCookie from "@/utils/cookie";
 
 export function parseToken(token: string) {
   // falsy or malformed jwt will throw InvalidTokenError
@@ -44,8 +45,12 @@ export function parseToken(token: string) {
 
 export async function validateLogin() {
   try {
-    if (localStorage.getItem("jwt")) {
-      await renew(<string>localStorage.getItem("jwt"));
+    // Fall back to the `auth` cookie when localStorage is empty so that
+    // installed-PWA contexts (which may not share localStorage with the
+    // regular browser tab) can still resume the session.
+    const jwt = localStorage.getItem("jwt") || getCookie("auth");
+    if (jwt) {
+      await renew(jwt);
     }
   } catch (error) {
     console.warn("Invalid JWT token in storage");
