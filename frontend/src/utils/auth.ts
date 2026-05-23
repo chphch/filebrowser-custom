@@ -14,9 +14,14 @@ export function parseToken(token: string) {
   // Persist the auth cookie until the JWT itself expires so the session
   // survives a browser restart (otherwise it is treated as a session cookie
   // and the user has to log in again on every relaunch).
+  //
+  // SameSite=Lax (not Strict) so the cookie is sent on top-level GET
+  // navigations from external origins (e.g. clicking a filebrowser link
+  // shared from Happy or other apps); Strict drops it on the initial
+  // cross-site request and the SPA then fails to resume the session.
   const maxAge = data.exp ? Math.max(0, data.exp - Math.floor(Date.now() / 1000)) : 0;
   const secure = window.location.protocol === "https:" ? " Secure;" : "";
-  document.cookie = `auth=${token}; Path=/; Max-Age=${maxAge}; SameSite=Strict;${secure}`;
+  document.cookie = `auth=${token}; Path=/; Max-Age=${maxAge}; SameSite=Lax;${secure}`;
 
   localStorage.setItem("jwt", token);
 
@@ -126,7 +131,7 @@ export async function signup(username: string, password: string) {
 }
 
 export function logout(reason?: string) {
-  document.cookie = "auth=; Max-Age=0; Path=/; SameSite=Strict;";
+  document.cookie = "auth=; Max-Age=0; Path=/; SameSite=Lax;";
 
   const authStore = useAuthStore();
   authStore.clearUser();
