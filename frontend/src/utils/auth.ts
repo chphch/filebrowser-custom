@@ -50,9 +50,32 @@ export function parseToken(token: string) {
 
 export async function validateLogin() {
   try {
-    // Fall back to the `auth` cookie when localStorage is empty so that
-    // installed-PWA contexts (which may not share localStorage with the
-    // regular browser tab) can still resume the session.
+    // 1) Short-token bootstrap. If the URL carries `?auth=<short-jwt>` we
+    //    are most likely entering from a cookie-less context (e.g. an
+    //    in-app browser opened from a third-party app). Strip the token
+    //    from `window.location` immediately — even before the network
+    //    round-trip — so it cannot leak via screenshot, screen-share, or
+    //    a subsequent Referer header, then exchange it for the regular
+    //    long-lived JWT.
+    const url = new URL(window.location.href);
+    const shortToken = url.searchParams.get("auth");
+    if (shortToken) {
+      url.searchParams.delete("auth");
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      try {
+        await exchangeShort(shortToken);
+        return;
+      } catch (e) {
+        // Fall through to the normal cookie/localStorage path so a stale
+        // or already-consumed short token does not block resuming an
+        // existing session.
+        console.warn("Short-token exchange failed", e);
+      }
+    }
+
+    // 2) Fall back to the `auth` cookie when localStorage is empty so that
+    //    installed-PWA contexts (which may not share localStorage with the
+    //    regular browser tab) can still resume the session.
     const jwt = localStorage.getItem("jwt") || getCookie("auth");
     if (jwt) {
       await renew(jwt);
@@ -60,6 +83,26 @@ export async function validateLogin() {
   } catch (error) {
     console.warn("Invalid JWT token in storage");
     throw error;
+  }
+}
+
+export async function exchangeShort(shortJwt: string) {
+  const res = await fetch(`${baseURL}/api/exchange-short`, {
+    method: "POST",
+    headers: {
+      "X-Short-Auth": shortJwt,
+    },
+  });
+
+  const body = await res.text();
+
+  if (res.status === 200) {
+    parseToken(body);
+  } else {
+    throw new StatusError(
+      body || `${res.status} ${res.statusText}`,
+      res.status
+    );
   }
 }
 
