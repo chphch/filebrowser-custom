@@ -256,16 +256,33 @@ onMounted(() => {
     if (isMarkdownFile && isPreview.value) {
       const new_value = editor.value?.getValue() || "";
       try {
-        previewContent.value = DOMPurify.sanitize(await marked(new_value));
+        previewContent.value = DOMPurify.sanitize(await marked(new_value), {
+          ADD_TAGS: ["foreignObject"],
+          ADD_ATTR: ["class"],
+        });
         await nextTick();
         const container = document.getElementById("preview-container");
         const nodes = container?.querySelectorAll<HTMLElement>("pre.mermaid");
         if (nodes && nodes.length > 0) {
           try {
             const mermaid = await loadMermaid();
-            await mermaid.run({ nodes: Array.from(nodes) });
+            const stamp = Date.now();
+            for (let i = 0; i < nodes.length; i++) {
+              const node = nodes[i];
+              const code = (node.textContent || "").trim();
+              if (!code) continue;
+              try {
+                const { svg } = await mermaid.render(`mmd-${stamp}-${i}`, code);
+                const wrap = document.createElement("div");
+                wrap.className = "mermaid-rendered";
+                wrap.innerHTML = svg;
+                node.replaceWith(wrap);
+              } catch (e) {
+                console.error("mermaid render failed for block", i, e);
+              }
+            }
           } catch (err) {
-            console.error("mermaid render failed:", err);
+            console.error("mermaid load failed:", err);
           }
         }
       } catch (error) {

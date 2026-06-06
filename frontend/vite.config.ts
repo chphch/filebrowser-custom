@@ -27,16 +27,21 @@ const resolve = {
 // https://vitejs.dev/config/
 export default defineConfig(({ command }) => {
   if (command === "serve") {
+    // Dev proxy target — override via VITE_BACKEND env var so the dev
+    // backend can run on a non-default port (e.g. when :8080 is held by
+    // a locally-installed prod filebrowser binary).
+    const backendHTTP = process.env.VITE_BACKEND || "http://127.0.0.1:8080";
+    const backendWS = backendHTTP.replace(/^http/, "ws");
     return {
       plugins,
       resolve,
       server: {
         proxy: {
           "/api/command": {
-            target: "ws://127.0.0.1:8080",
+            target: `${backendWS}`,
             ws: true,
           },
-          "/api": "http://127.0.0.1:8080",
+          "/api": backendHTTP,
         },
       },
     };
