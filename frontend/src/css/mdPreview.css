@@ -9,3 +9,15 @@
   overflow: auto;
   flex: 1;
 }
+
+.md_preview pre.mermaid {
+  background: transparent;
+  padding: 0;
+  text-align: center;
+  overflow: visible;
+}
+
+.md_preview pre.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}

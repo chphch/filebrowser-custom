@@ -93,14 +93,38 @@ import HeaderBar from "@/components/header/HeaderBar.vue";
 import { useAuthStore } from "@/stores/auth";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
-import { getEditorTheme } from "@/utils/theme";
+import { getEditorTheme, getTheme } from "@/utils/theme";
 import { marked } from "marked";
 import markedKatex from "marked-katex-extension";
 import "katex/dist/katex.min.css";
-import { inject, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
+import { inject, nextTick, onBeforeUnmount, onMounted, ref, watchEffect } from "vue";
 import { useI18n } from "vue-i18n";
 import { onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { read, copy } from "@/utils/clipboard";
+
+// Lazy-load mermaid only when an .md preview actually contains a mermaid
+// code block — keeps the initial bundle slim for users who never preview md.
+type MermaidAPI = typeof import("mermaid")["default"];
+let mermaidPromise: Promise<MermaidAPI> | null = null;
+const loadMermaid = (): Promise<MermaidAPI> => {
+  if (!mermaidPromise) {
+    mermaidPromise = import("mermaid").then((m) => {
+      m.default.initialize({
+        startOnLoad: false,
+        theme: getTheme() === "dark" ? "dark" : "default",
+        securityLevel: "strict",
+      });
+      return m.default;
+    });
+  }
+  return mermaidPromise;
+};
+
+const escapeHtmlText = (s: string): string =>
+  s.replace(
+    /[&<>]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!
+  );
 
 const $showError = inject<IToastError>("$showError")!;
 
@@ -183,6 +207,13 @@ marked.use({
         : "";
       return `<img src="${src}" alt="${escapedAlt}"${titleAttr} />`;
     },
+    code({ text, lang }: { text: string; lang?: string; escaped?: boolean }) {
+      if ((lang ?? "").trim().toLowerCase() === "mermaid") {
+        return `<pre class="mermaid">${escapeHtmlText(text)}</pre>`;
+      }
+      // Fall back to marked's default code renderer.
+      return false as unknown as string;
+    },
   },
 });
 
@@ -226,6 +257,17 @@ onMounted(() => {
       const new_value = editor.value?.getValue() || "";
       try {
         previewContent.value = DOMPurify.sanitize(await marked(new_value));
+        await nextTick();
+        const container = document.getElementById("preview-container");
+        const nodes = container?.querySelectorAll<HTMLElement>("pre.mermaid");
+        if (nodes && nodes.length > 0) {
+          try {
+            const mermaid = await loadMermaid();
+            await mermaid.run({ nodes: Array.from(nodes) });
+          } catch (err) {
+            console.error("mermaid render failed:", err);
+          }
+        }
       } catch (error) {
         console.error("Failed to convert content to HTML:", error);
         previewContent.value = "";
