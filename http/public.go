@@ -120,10 +120,93 @@ var publicShareHandler = withHashFile(func(w http.ResponseWriter, r *http.Reques
 var publicDlHandler = withHashFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
 	file := d.raw.(*files.FileInfo)
 	if !file.IsDir {
+		if r.URL.Query().Get("render") == "true" && isMarkdownExt(file.Name) {
+			return renderMarkdownToHTML(w, r, file)
+		}
 		return rawFileHandler(w, r, file)
 	}
 
 	return rawDirHandler(w, r, d, file)
+})
+
+// withPathPublicFile resolves /api/public/files/<abs-path> to a path-public share
+// and prepares d.user / d.raw for the wrapped handler. File-only (Phase 1):
+// directories return 404. Path-public shares cannot have passwords.
+var withPathPublicFile = func(fn handleFunc) handleFunc {
+	return func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+		// stripPrefix has already removed /api/public/files/; URL.Path is the
+		// absolute filesystem path without its leading slash.
+		raw := r.URL.Path
+		if raw == "" || raw == "/" {
+			return http.StatusNotFound, nil
+		}
+		absPath := "/" + strings.TrimPrefix(raw, "/")
+		// Reject traversal and require a canonical form.
+		cleaned := path.Clean(absPath)
+		if cleaned != absPath || strings.Contains(absPath, "..") {
+			return http.StatusNotFound, nil
+		}
+
+		link, err := d.store.Share.GetByPathPublic(cleaned)
+		if err != nil {
+			return http.StatusNotFound, nil
+		}
+		if link.PasswordHash != "" || !link.PathPublic {
+			return http.StatusNotFound, nil
+		}
+
+		user, err := d.store.Users.Get(d.server.Root, link.UserID)
+		if err != nil {
+			return http.StatusNotFound, nil
+		}
+		if !user.Perm.Share || !user.Perm.Download {
+			return http.StatusNotFound, nil
+		}
+		d.user = user
+
+		file, err := files.NewFileInfo(&files.FileOptions{
+			Fs:         d.user.Fs,
+			Path:       link.Path,
+			Modify:     d.user.Perm.Modify,
+			Expand:     false,
+			ReadHeader: d.server.TypeDetectionByHeader,
+			CalcImgRes: d.server.TypeDetectionByHeader,
+			Checker:    d,
+		})
+		if err != nil {
+			return http.StatusNotFound, nil
+		}
+		if file.IsDir {
+			return http.StatusNotFound, nil
+		}
+
+		// Re-root FS to the file's parent so rawFileHandler sees a plain path.
+		basePath := filepath.Clean(link.Path)
+		d.user.Fs = afero.NewBasePathFs(d.user.Fs, basePath)
+		file, err = files.NewFileInfo(&files.FileOptions{
+			Fs:      d.user.Fs,
+			Path:    "",
+			Modify:  d.user.Perm.Modify,
+			Expand:  true,
+			Checker: d,
+		})
+		if err != nil {
+			return http.StatusNotFound, nil
+		}
+
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		w.Header().Set("Cache-Control", "private, no-store")
+		d.raw = file
+		return fn(w, r, d)
+	}
+}
+
+var publicPathFileHandler = withPathPublicFile(func(w http.ResponseWriter, r *http.Request, d *data) (int, error) {
+	file := d.raw.(*files.FileInfo)
+	if r.URL.Query().Get("render") == "true" && isMarkdownExt(file.Name) {
+		return renderMarkdownToHTML(w, r, file)
+	}
+	return rawFileHandler(w, r, file)
 })
 
 func authenticateShareRequest(r *http.Request, l *share.Link) (int, error) {

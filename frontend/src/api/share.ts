@@ -19,7 +19,8 @@ export async function create(
   url: string,
   password = "",
   expires = "",
-  unit = "hours"
+  unit = "hours",
+  pathPublic = false
 ) {
   url = removePrefix(url);
   url = `/api/share${url}`;
@@ -27,11 +28,12 @@ export async function create(
     url += `?expires=${expires}&unit=${unit}`;
   }
   let body = "{}";
-  if (password != "" || expires !== "" || unit !== "hours") {
+  if (password != "" || expires !== "" || unit !== "hours" || pathPublic) {
     body = JSON.stringify({
       password: password,
       expires: expires.toString(), // backend expects string not number
       unit: unit,
+      pathPublic: pathPublic,
     });
   }
   return fetchJSON(url, {
@@ -42,4 +44,10 @@ export async function create(
 
 export function getShareURL(share: Share) {
   return createURL("share/" + share.hash, {});
+}
+
+export function getPathPublicURL(share: Share, inline = false) {
+  if (!share.pathPublic) return "";
+  const params = inline ? { inline: "true" } : {};
+  return createURL("api/public/files" + share.path, params);
 }

@@ -11,6 +11,7 @@ type StorageBackend interface {
 	All() ([]*Link, error)
 	FindByUserID(id uint) ([]*Link, error)
 	GetByHash(hash string) (*Link, error)
+	GetByPathPublic(path string) (*Link, error)
 	GetPermanent(path string, id uint) (*Link, error)
 	Gets(path string, id uint) ([]*Link, error)
 	Save(s *Link) error
@@ -71,6 +72,24 @@ func (s *Storage) FindByUserID(id uint) ([]*Link, error) {
 // GetByHash wraps a StorageBackend.GetByHash.
 func (s *Storage) GetByHash(hash string) (*Link, error) {
 	link, err := s.back.GetByHash(hash)
+	if err != nil {
+		return nil, err
+	}
+
+	if link.Expire != 0 && link.Expire <= time.Now().Unix() {
+		if err := s.Delete(link.Hash); err != nil {
+			return nil, err
+		}
+		return nil, fberrors.ErrNotExist
+	}
+
+	return link, nil
+}
+
+// GetByPathPublic returns a path-public share for the exact path, if any
+// and not expired. Used by the anonymous /api/public/files/<abs-path> endpoint.
+func (s *Storage) GetByPathPublic(path string) (*Link, error) {
+	link, err := s.back.GetByPathPublic(path)
 	if err != nil {
 		return nil, err
 	}

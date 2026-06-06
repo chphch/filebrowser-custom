@@ -131,6 +131,13 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		expire = time.Now().Add(add).Unix()
 	}
 
+	// Path-public + password is disallowed: a public path-URL implies anonymous,
+	// while a password requires a shared secret. Mixing the two creates a
+	// confusing UX with no real security gain over hash + password.
+	if body.PathPublic && body.Password != "" {
+		return http.StatusBadRequest, fmt.Errorf("pathPublic shares cannot have a password")
+	}
+
 	hash, status, err := getSharePasswordHash(body)
 	if err != nil {
 		return status, err
@@ -152,6 +159,7 @@ var sharePostHandler = withPermShare(func(w http.ResponseWriter, r *http.Request
 		UserID:       d.user.ID,
 		PasswordHash: string(hash),
 		Token:        token,
+		PathPublic:   body.PathPublic,
 	}
 
 	if err := d.store.Share.Save(s); err != nil {

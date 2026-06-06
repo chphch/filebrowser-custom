@@ -44,6 +44,16 @@ func (s shareBackend) GetByHash(hash string) (*share.Link, error) {
 	return &v, err
 }
 
+func (s shareBackend) GetByPathPublic(path string) (*share.Link, error) {
+	var v share.Link
+	err := s.db.Select(q.Eq("Path", path), q.Eq("PathPublic", true)).First(&v)
+	if errors.Is(err, storm.ErrNotFound) {
+		return nil, fberrors.ErrNotExist
+	}
+
+	return &v, err
+}
+
 func (s shareBackend) GetPermanent(path string, id uint) (*share.Link, error) {
 	var v share.Link
 	err := s.db.Select(q.Eq("Path", path), q.Eq("Expire", 0), q.Eq("UserID", id)).First(&v)

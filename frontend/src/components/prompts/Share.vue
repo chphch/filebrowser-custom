@@ -13,10 +13,19 @@
             <th></th>
             <th></th>
             <th></th>
+            <th></th>
           </tr>
 
           <tr v-for="link in links" :key="link.hash">
-            <td>{{ link.hash }}</td>
+            <td>
+              {{ link.hash }}
+              <i
+                v-if="link.pathPublic"
+                class="material-icons"
+                style="font-size: 1em; vertical-align: middle"
+                title="Path-visible public URL"
+              >public</i>
+            </td>
             <td>
               <template v-if="link.expire !== 0">{{
                 humanTime(link.expire)
@@ -42,6 +51,17 @@
                 @click="copyToClipboard(buildDownloadLink(link))"
               >
                 <i class="material-icons">content_paste_go</i>
+              </button>
+            </td>
+            <td class="small">
+              <button
+                v-if="link.pathPublic"
+                class="action"
+                aria-label="Copy path-visible URL"
+                title="Copy path-visible URL"
+                @click="copyToClipboard(buildPathPublicLink(link))"
+              >
+                <i class="material-icons">public</i>
               </button>
             </td>
             <td class="small">
@@ -112,8 +132,26 @@
           class="input input--block"
           type="password"
           v-model.trim="password"
+          :disabled="pathPublic"
           tabindex="3"
         />
+        <p style="margin-top: 1em">
+          <label style="display: flex; align-items: center; gap: 0.5em; cursor: pointer">
+            <input
+              type="checkbox"
+              v-model="pathPublic"
+              :disabled="!!password"
+              tabindex="3"
+            />
+            <span>Path-visible public URL (anyone with the URL can read)</span>
+          </label>
+        </p>
+        <p
+          v-if="pathPublic"
+          style="font-size: 0.85em; color: #b86b00; margin-top: 0.5em"
+        >
+          ⚠ This share will be accessible without authentication at a URL containing the file's absolute path. Anyone with the URL gets the file. Setting an expiration is recommended.
+        </p>
       </div>
 
       <div class="card-action">
@@ -158,6 +196,7 @@ export default {
       links: [],
       clip: null,
       password: "",
+      pathPublic: false,
       listing: true,
     };
   },
@@ -220,18 +259,26 @@ export default {
     },
     submit: async function () {
       try {
-        let res = null;
-
-        if (!this.time) {
-          res = await api.share.create(this.url, this.password);
-        } else {
-          res = await api.share.create(
-            this.url,
-            this.password,
-            this.time,
-            this.unit
+        if (this.pathPublic && this.password) {
+          this.$showError(
+            new Error("Path-visible URL cannot be combined with a password")
           );
+          return;
         }
+        if (this.pathPublic) {
+          const ok = window.confirm(
+            "This share will be accessible without authentication at a URL containing the file's absolute path. Anyone with the URL can read the file. Proceed?"
+          );
+          if (!ok) return;
+        }
+
+        const res = await api.share.create(
+          this.url,
+          this.password,
+          this.time ? String(this.time) : "",
+          this.unit,
+          this.pathPublic
+        );
 
         this.links.push(res);
         this.sort();
@@ -239,6 +286,7 @@ export default {
         this.time = 0;
         this.unit = "hours";
         this.password = "";
+        this.pathPublic = false;
 
         this.listing = true;
       } catch (e) {
@@ -272,6 +320,9 @@ export default {
         },
         true
       );
+    },
+    buildPathPublicLink(share) {
+      return api.share.getPathPublicURL(share, true);
     },
     sort() {
       this.links = this.links.sort((a, b) => {

@@ -1,9 +1,10 @@
 package share
 
 type CreateBody struct {
-	Password string `json:"password"`
-	Expires  string `json:"expires"`
-	Unit     string `json:"unit"`
+	Password   string `json:"password"`
+	Expires    string `json:"expires"`
+	Unit       string `json:"unit"`
+	PathPublic bool   `json:"pathPublic"`
 }
 
 // Link is the information needed to build a shareable link.
@@ -17,4 +18,7 @@ type Link struct {
 	// URL-Safe and is used to download links in password-protected shares via a
 	// query arg.
 	Token string `json:"token,omitempty"`
+	// PathPublic exposes this share via /api/public/files/<abs-path>, allowing
+	// anonymous access without knowing the hash. Mutually exclusive with PasswordHash.
+	PathPublic bool `json:"pathPublic,omitempty"`
 }
