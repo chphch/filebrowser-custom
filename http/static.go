@@ -123,7 +123,9 @@ func getStaticHandlers(store *storage.Storage, server *settings.Server, assetsFs
 		}
 
 		const maxAge = 86400 // 1 day
-		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
+		// NB: Cache-Control is set per-branch *after* we know we'll serve a
+		// 200 — otherwise a 404 inherits the same long max-age and gets
+		// pinned at the CDN edge for 24h.
 
 		if d.settings.Branding.Files != "" {
 			if strings.HasPrefix(r.URL.Path, "img/") {
@@ -132,16 +134,19 @@ func getStaticHandlers(store *storage.Storage, server *settings.Server, assetsFs
 				if err != nil && !os.IsNotExist(err) {
 					log.Printf("could not load branding file override: %v", err)
 				} else if err == nil {
+					w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
 					http.ServeFile(w, r, fPath)
 					return 0, nil
 				}
 			} else if r.URL.Path == "custom.css" && d.settings.Branding.Files != "" {
+				w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
 				http.ServeFile(w, r, filepath.Join(d.settings.Branding.Files, "custom.css"))
 				return 0, nil
 			}
 		}
 
 		if !strings.HasSuffix(r.URL.Path, ".js") {
+			w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
 			http.FileServer(http.FS(assetsFs)).ServeHTTP(w, r)
 			return 0, nil
 		}
@@ -151,6 +156,7 @@ func getStaticHandlers(store *storage.Storage, server *settings.Server, assetsFs
 			return http.StatusNotFound, err
 		}
 		defer f.Close()
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
 
 		acceptEncoding := r.Header.Get("Accept-Encoding")
 		if strings.Contains(acceptEncoding, "gzip") {
