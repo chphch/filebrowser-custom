@@ -14,7 +14,15 @@ const plugins = [
     // defaults already drop IE support
     targets: ["defaults"],
   }),
-  compression({ include: /\.js$/, deleteOriginalAssets: false }),
+  // Explicit `algorithm: "gzip"` — the v2 plugin default produces `.br`
+  // only for modern chunks, but http/static.go serves `.gz` exclusively.
+  // Without this, every dynamic-import chunk that lacks a `.gz` sibling
+  // 404s on prod and the SPA hangs trying to load mermaid / lodash / etc.
+  compression({
+    algorithm: "gzip",
+    include: /\.js$/,
+    deleteOriginalAssets: false,
+  }),
 ];
 
 const resolve = {

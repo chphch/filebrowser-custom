@@ -151,9 +151,15 @@ func getStaticHandlers(store *storage.Storage, server *settings.Server, assetsFs
 			return 0, nil
 		}
 
+		// Compression plugins skip pre-gzipping tiny chunks (gzip overhead
+		// outweighs savings below ~1KB), so a missing `.gz` sidecar must
+		// fall back to the raw `.js` rather than 404 — that's a real chunk
+		// the SPA needs.
 		f, err := assetsFs.Open(r.URL.Path + ".gz")
 		if err != nil {
-			return http.StatusNotFound, err
+			w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
+			http.FileServer(http.FS(assetsFs)).ServeHTTP(w, r)
+			return 0, nil
 		}
 		defer f.Close()
 		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%v", maxAge))
