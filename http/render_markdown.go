@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/russross/blackfriday/v2"
@@ -32,6 +33,7 @@ code { background:var(--code-bg); padding:.18em .35em; border-radius:4px;
   font:.92em ui-monospace,SFMono-Regular,Menlo,monospace; }
 pre { background:var(--code-bg); padding:14px; border-radius:6px; overflow:auto; }
 pre code { background:transparent; padding:0; }
+pre.mermaid { background:transparent; padding:0; text-align:center; }
 blockquote { margin:1em 0; padding:0 1em; color:var(--muted); border-left:4px solid var(--border); }
 table { border-collapse:collapse; margin:1em 0; }
 th,td { border:1px solid var(--border); padding:6px 13px; }
@@ -44,8 +46,24 @@ img { max-width:100%%; }
 <main>
 %s
 </main>
+%s
 </body>
 </html>`
+
+// mermaidScript is appended to the page only when at least one mermaid code
+// block is present. It loads mermaid as an ES module from a CDN and renders
+// every <pre class="mermaid"> block on load. Requires the render endpoint's
+// relaxed CSP (see renderMarkdownToHTML).
+const mermaidScript = `<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+</script>`
+
+// mermaidBlockRe matches the <pre><code class="language-mermaid">…</code></pre>
+// that blackfriday emits for a ```mermaid fenced block. The inner text stays
+// HTML-escaped — the browser decodes it back via textContent when mermaid reads
+// the node, so the diagram source is recovered intact.
+var mermaidBlockRe = regexp.MustCompile(`(?s)<pre><code class="language-mermaid">(.*?)</code></pre>`)
 
 // isMarkdownExt reports whether the file extension is a markdown variant.
 func isMarkdownExt(name string) bool {
@@ -57,8 +75,10 @@ func isMarkdownExt(name string) bool {
 }
 
 // renderMarkdownToHTML reads the file, renders the markdown to HTML, and
-// writes a self-contained HTML page with inline CSS. No scripts are emitted,
-// so the global `script-src 'none'` CSP does not interfere.
+// writes a self-contained HTML page with inline CSS. When the document
+// contains mermaid code blocks, a mermaid ES-module loader is injected and the
+// Content-Security-Policy is relaxed just enough to run it; otherwise no
+// scripts are emitted.
 func renderMarkdownToHTML(w http.ResponseWriter, _ *http.Request, file *files.FileInfo) (int, error) {
 	fd, err := file.Fs.Open(file.Path)
 	if err != nil {
@@ -74,6 +94,28 @@ func renderMarkdownToHTML(w http.ResponseWriter, _ *http.Request, file *files.Fi
 	body := blackfriday.Run(raw,
 		blackfriday.WithExtensions(blackfriday.CommonExtensions))
 
+	// Convert mermaid fenced code into the <pre class="mermaid"> form mermaid.js
+	// renders, and decide whether the page needs the mermaid loader.
+	htmlBody := mermaidBlockRe.ReplaceAllStringFunc(string(body), func(m string) string {
+		sub := mermaidBlockRe.FindStringSubmatch(m)
+		return `<pre class="mermaid">` + sub[1] + `</pre>`
+	})
+	hasMermaid := strings.Contains(htmlBody, `<pre class="mermaid">`)
+
+	// Override both the global middleware CSP (default-src 'self') and the old
+	// script-src 'none' with a single authoritative policy. When mermaid is
+	// present, relax it just enough to load and run the CDN module.
+	script := ""
+	csp := `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline';`
+	if hasMermaid {
+		script = mermaidScript
+		csp = `default-src 'self'; img-src 'self' data:; ` +
+			`font-src 'self' data: https://cdn.jsdelivr.net; ` +
+			`style-src 'self' 'unsafe-inline'; ` +
+			`script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; ` +
+			`connect-src 'self' https://cdn.jsdelivr.net;`
+	}
+
 	// Best-effort title from first H1.
 	title := file.Name
 	for _, line := range strings.SplitN(string(raw), "\n", 50) {
@@ -84,9 +126,9 @@ func renderMarkdownToHTML(w http.ResponseWriter, _ *http.Request, file *files.Fi
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Add("Content-Security-Policy", `script-src 'none';`)
+	w.Header().Set("Content-Security-Policy", csp)
 	w.Header().Set("Cache-Control", "private, no-store")
-	_, err = fmt.Fprintf(w, markdownHTMLTemplate, html.EscapeString(title), body)
+	_, err = fmt.Fprintf(w, markdownHTMLTemplate, html.EscapeString(title), htmlBody, script)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
