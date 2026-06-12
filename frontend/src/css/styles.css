@@ -103,6 +103,15 @@ main .spinner .bounce2 {
   cursor: not-allowed;
 }
 
+/* Toggle "on" state (e.g. public-link toggle): tint the icon with the accent. */
+.action.active {
+  color: var(--blue);
+}
+
+.action.active i {
+  color: var(--blue);
+}
+
 .action i {
   padding: 0.4em;
   transition: 0.1s ease-in-out all;

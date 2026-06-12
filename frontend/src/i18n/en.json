@@ -26,6 +26,7 @@
     "previous": "Previous",
     "preview": "Preview",
     "publish": "Publish",
+    "publicLink": "Public link",
     "rename": "Rename",
     "replace": "Replace",
     "reportIssue": "Report Issue",
@@ -295,7 +296,9 @@
     "siteSettings": "Site Settings"
   },
   "success": {
-    "linkCopied": "Link copied!"
+    "linkCopied": "Link copied!",
+    "publicLinkCopied": "Public link created & copied!",
+    "publicLinkRevoked": "Public link revoked"
   },
   "time": {
     "days": "Days",

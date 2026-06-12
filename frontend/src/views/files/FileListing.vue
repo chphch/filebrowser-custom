@@ -19,6 +19,13 @@
             show="share"
           />
           <action
+            v-if="headerButtons.publicLink"
+            :icon="isPublic ? 'public' : 'public_off'"
+            :label="t('buttons.publicLink')"
+            :active="isPublic"
+            @action="togglePublic"
+          />
+          <action
             v-if="headerButtons.rename"
             icon="mode_edit"
             :label="t('buttons.rename')"
@@ -96,6 +103,13 @@
         icon="share"
         :label="t('buttons.share')"
         show="share"
+      />
+      <action
+        v-if="headerButtons.publicLink"
+        :icon="isPublic ? 'public' : 'public_off'"
+        :label="t('buttons.publicLink')"
+        :active="isPublic"
+        @action="togglePublic"
       />
       <action
         v-if="headerButtons.rename"
@@ -292,6 +306,13 @@
             show="share"
           />
           <action
+            v-if="headerButtons.publicLink"
+            :icon="isPublic ? 'public' : 'public_off'"
+            :label="t('buttons.publicLink')"
+            :active="isPublic"
+            @action="togglePublic"
+          />
+          <action
             v-if="headerButtons.rename"
             icon="mode_edit"
             :label="t('buttons.rename')"
@@ -368,10 +389,11 @@ import { useClipboardStore } from "@/stores/clipboard";
 import { useFileStore } from "@/stores/file";
 import { useLayoutStore } from "@/stores/layout";
 
-import { users, files as api } from "@/api";
+import { users, files as api, share } from "@/api";
 import { enableExec } from "@/utils/constants";
 import * as upload from "@/utils/upload";
 import css from "@/utils/css";
+import { copy } from "@/utils/clipboard";
 import { throttle } from "lodash-es";
 import { Base64 } from "js-base64";
 
@@ -403,6 +425,7 @@ const isContextMenuVisible = ref<boolean>(false);
 const contextMenuPos = ref<{ x: number; y: number }>({ x: 0, y: 0 });
 
 const $showError = inject<IToastError>("$showError")!;
+const $showSuccess = inject<IToastSuccess>("$showSuccess")!;
 
 const clipboardStore = useClipboardStore();
 const authStore = useAuthStore();
@@ -506,6 +529,19 @@ const viewIcon = computed(() => {
     : icons[authStore.user.viewMode];
 });
 
+// The single non-directory file currently selected, or null. Path-public
+// shares are file-only on the backend (http/public.go returns 404 for dirs),
+// so the public-link toggle only applies here.
+const singleSelectedFile = computed((): ResourceItem | null => {
+  if (fileStore.selectedCount !== 1 || fileStore.req === null) return null;
+  const item = fileStore.req.items[fileStore.selected[0]];
+  return item && !item.isDir ? item : null;
+});
+
+const canShare = computed(
+  () => !!authStore.user?.perm.share && !!authStore.user?.perm.download
+);
+
 const headerButtons = computed(() => {
   return {
     upload: authStore.user?.perm.create,
@@ -513,14 +549,73 @@ const headerButtons = computed(() => {
     shell: authStore.user?.perm.execute && enableExec,
     delete: fileStore.selectedCount > 0 && authStore.user?.perm.delete,
     rename: fileStore.selectedCount === 1 && authStore.user?.perm.rename,
-    share:
-      fileStore.selectedCount === 1 &&
-      authStore.user?.perm.share &&
-      authStore.user?.perm.download,
+    share: fileStore.selectedCount === 1 && canShare.value,
+    publicLink: singleSelectedFile.value !== null && canShare.value,
     move: fileStore.selectedCount > 0 && authStore.user?.perm.rename,
     copy: fileStore.selectedCount > 0 && authStore.user?.perm.create,
   };
 });
+
+// Public-link toggle state for the single selected file.
+const publicShare = ref<Share | null>(null);
+const publicBusy = ref<boolean>(false);
+const isPublic = computed(() => publicShare.value !== null);
+
+// Refresh whether the selected file already has a path-public share. Keyed off
+// the file's stable url so it re-runs on (de)selection and listing reloads.
+const refreshPublicState = async () => {
+  publicShare.value = null;
+  const file = singleSelectedFile.value;
+  if (file === null || !canShare.value) return;
+  try {
+    const links = await share.get(file.url);
+    publicShare.value = (links ?? []).find((l) => l.pathPublic) ?? null;
+  } catch {
+    publicShare.value = null;
+  }
+};
+
+const togglePublic = async () => {
+  const file = singleSelectedFile.value;
+  if (file === null || publicBusy.value) return;
+  publicBusy.value = true;
+  try {
+    if (publicShare.value !== null) {
+      // Revoke: delete the path-public share, link goes dead.
+      await share.remove(publicShare.value.hash);
+      publicShare.value = null;
+      $showSuccess(t("success.publicLinkRevoked"));
+    } else {
+      // Enable: create a path-public share (no password, no expiry) and copy
+      // its URL to the clipboard.
+      const created = await share.create(file.url, "", "", "hours", true);
+      publicShare.value = created;
+      const link = share.getPathPublicURL(created, true);
+      try {
+        await copy({ text: link });
+      } catch {
+        await copy({ text: link }, { permission: true });
+      }
+      $showSuccess(t("success.publicLinkCopied"));
+    }
+  } catch (e: any) {
+    $showError(e);
+  } finally {
+    publicBusy.value = false;
+  }
+};
+
+// Re-check public state when the single-selected file changes, and when a
+// prompt (e.g. the Share dialog, which can also create/delete shares) closes.
+watch(() => singleSelectedFile.value?.url ?? null, refreshPublicState, {
+  immediate: true,
+});
+watch(
+  () => layoutStore.currentPrompt,
+  (cur, prev) => {
+    if (prev && !cur) refreshPublicState();
+  }
+);
 
 const isMobile = computed(() => {
   return width.value <= 736;
